@@ -2,8 +2,8 @@ name: Run V2Ray Collector and Bot
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # اجرای خودکار هر ۶ ساعت یک‌بار
-  workflow_dispatch:      # قابلیت اجرای دستی با کلیک دکمه Run
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 jobs:
   run-scripts:
@@ -23,6 +23,8 @@ jobs:
           pip install requests
 
       - name: Process Configs and Run Bot Responder
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           python process_configs_v2.py
           python bot.py
