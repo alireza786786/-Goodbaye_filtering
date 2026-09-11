@@ -1,4 +1,28 @@
-- name: Run Processing and Bot Responder
+name: Run V2Ray Collector and Bot
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # اجرای خودکار هر ۶ ساعت یک‌بار
+  workflow_dispatch:      # قابلیت اجرای دستی با کلیک دکمه Run
+
+jobs:
+  run-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Process Configs and Run Bot Responder
         run: |
           python process_configs_v2.py
           python bot.py
