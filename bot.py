@@ -2,17 +2,15 @@ import os
 import sys
 import requests
 
-# دریافت توکن ربات از متغیرهای محیطی گیت‌هاب (Secrets)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 if not TELEGRAM_BOT_TOKEN:
-    print("❌ خطای امنیتی: توکن TELEGRAM_BOT_TOKEN در متغیرهای محیطی یا Secrets یافت نشد!")
+    print("❌ خطای امنیتی: توکن ربات یافت نشد!")
     sys.exit(1)
 
 BASE_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
 def get_updates(offset=None):
-    """دریافت آخرین پیام‌ها و دستورات ارسال شده به ربات"""
     url = f"{BASE_URL}/getUpdates?timeout=20"
     if offset:
         url += f"&offset={offset}"
@@ -20,11 +18,10 @@ def get_updates(offset=None):
         res = requests.get(url, timeout=25).json()
         return res.get("result", [])
     except Exception as e:
-        print(f"❌ خطا در دریافت آپدیت‌ها: {e}")
+        print(f"❌ خطا در دریافت پیام‌ها: {e}")
         return []
 
 def send_message(chat_id, text):
-    """ارسال پیام متنی به کاربر"""
     try:
         requests.post(f"{BASE_URL}/sendMessage", data={
             "chat_id": chat_id,
@@ -33,78 +30,113 @@ def send_message(chat_id, text):
             "disable_web_page_preview": True
         }, timeout=15)
     except Exception as e:
-        print(f"❌ خطا در ارسال پیام به {chat_id}: {e}")
+        print(f"❌ خطا در ارسال پیام: {e}")
 
-def send_file(chat_id, file_path, caption=""):
-    """ارسال فایل کانفیگ به کاربر"""
-    url = f"{BASE_URL}/sendDocument"
-    if not os.path.exists(file_path):
-        send_message(chat_id, "❌ در حال حاضر فایلی موجود نیست. لطفاً دقایقی دیگر تلاش کنید.")
-        return
+def load_and_categorize_configs():
+    """خواندن فایل‌های تولید شده و تفکیک کانفیگ‌ها بر اساس پروتکل"""
+    file_path = "subs/plain.txt"
+    categorized = {
+        "vless": [],
+        "vmess": [],
+        "trojan": [],
+        "ss": [],
+        "hysteria": []
+    }
     
-    try:
-        with open(file_path, "rb") as doc:
-            requests.post(url, data={
-                "chat_id": chat_id,
-                "caption": caption or "🚀 خدمت شما! فایل کانفیگ‌های بروز شده:",
-                "parse_mode": "HTML"
-            }, files={"document": doc}, timeout=30)
-    except Exception as e:
-        print(f"❌ خطا در ارسال فایل به {chat_id}: {e}")
+    if not os.path.exists(file_path):
+        # اگر فایل plain مستقیم نبود، فایل‌های پارت را باز می‌کند
+        file_path = "subs/subscription_part1.txt"
+
+    if not os.path.exists(file_path):
+        return categorized
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    for line in lines:
+        line = line.strip()
+        if line.startswith("vless://"):
+            categorized["vless"].append(line)
+        elif line.startswith("vmess://"):
+            categorized["vmess"].append(line)
+        elif line.startswith("trojan://"):
+            categorized["trojan"].append(line)
+        elif line.startswith("ss://"):
+            categorized["ss"].append(line)
+        elif line.startswith("hy2://") or line.startswith("hysteria2://"):
+            categorized["hysteria"].append(line)
+
+    return categorized
 
 def handle_updates():
-    """بررسی و پاسخ به درخواست‌های کاربران"""
     offset = None
-    print("🤖 ربات پاسخگو فعال شد و در حال بررسی درخواست‌هاست...")
-    
+    print("🤖 ربات تفکیک‌کننده کانفیگ فعال شد...")
+
     updates = get_updates(offset)
     if not updates:
-        print("ℹ️ هیچ درخواست جدیدی برای پاسخگویی وجود ندارد.")
+        print("ℹ️ پیام جدیدی یافت نشد.")
         return
+
+    # بارگذاری و تفکیک کانفیگ‌ها
+    configs = load_and_categorize_configs()
 
     for update in updates:
         offset = update["update_id"] + 1
         message = update.get("message", {})
         chat_id = message.get("chat", {}).get("id")
-        text = message.get("text", "").strip()
+        text = message.get("text", "").strip().lower()
 
         if not chat_id:
             continue
 
-        file_path = "subs/subscription_part1.txt"
-
-        if text in ["/start", "/get_all"]:
-            caption = (
-                "🚀 <b>لیست جامع کانفیگ‌های پرسرعت</b>\n\n"
-                "📦 شامل انواع پروتکل‌های VLESS، VMESS، Trojan و...\n"
-                "⚡️ تست شده با پینگ پایین و متصل به سرورهای باکیفیت"
+        if text == "/start":
+            msg = (
+                "👋 <b>به ربات دریافت کانفیگ خوش آمدید!</b>\n\n"
+                "برای دریافت کانفیگ‌های تفکیک‌شده و آماده‌ی کپی، یکی از دستورات زیر را بفرستید یا از منو انتخاب کنید:\n\n"
+                "⚡️ /vless - دریافت کانفیگ‌های VLESS\n"
+                "🛡 /vmess - دریافت کانفیگ‌های VMESS\n"
+                "🔒 /trojan - دریافت کانفیگ‌های Trojan\n"
+                "✈️ /shadowsocks - دریافت کانفیگ‌های Shadowsocks\n"
+                "🚀 /hysteria - دریافت کانفیگ‌های Hysteria2\n\n"
+                "📦 /get_all - دریافت همه کانفیگ‌ها"
             )
-            send_file(chat_id, file_path, caption)
+            send_message(chat_id, msg)
 
-        elif text == "/vless":
-            send_file(chat_id, file_path, "⚡️ <b>کانفیگ‌های اختصاصی VLESS</b>\nاز فایل زیر برای اتصال استفاده کنید:")
+        elif text in ["/vless", "/vmess", "/trojan", "/shadowsocks", "/hysteria"]:
+            proto_key = text.replace("/", "")
+            if proto_key == "shadowsocks":
+                proto_key = "ss"
 
-        elif text == "/vmess":
-            send_file(chat_id, file_path, "🛡 <b>کانفیگ‌های اختصاصی VMESS</b>\nاز فایل زیر برای اتصال استفاده کنید:")
+            selected = configs.get(proto_key, [])
+            if not selected:
+                send_message(chat_id, f"❌ در حال حاضر کانفیگی برای بخش {text.upper()} موجود نیست.")
+            else:
+                # جدا کردن ۵ کانفیگ برتر همان پروتکل برای ارسال متنی (جهت کپی راحت)
+                top_configs = selected[:5]
+                formatted_list = "\n\n".join([f"<code>{c}</code>" for c in top_configs])
+                
+                reply = (
+                    f"🚀 <b>کانفیگ‌های تفکیک‌شده {text.replace('/', '').upper()}:</b>\n\n"
+                    f"{formatted_list}\n\n"
+                    f"👇 روی کدها بزنید تا کپی شوند."
+                )
+                send_message(chat_id, reply)
 
-        elif text == "/trojan":
-            send_file(chat_id, file_path, "🔒 <b>کانفیگ‌های اختصاصی Trojan</b>\nاز فایل زیر برای اتصال استفاده کنید:")
-
-        elif text == "/shadowsocks":
-            send_file(chat_id, file_path, "✈️ <b>کانفیگ‌های اختصاصی Shadowsocks</b>\nاز فایل زیر برای اتصال استفاده کنید:")
-
-        elif text == "/hysteria":
-            send_file(chat_id, file_path, "🚀 <b>کانفیگ‌های اختصاصی Hysteria2</b>\nاز فایل زیر برای اتصال استفاده کنید:")
-
-        elif text == "/help":
-            help_text = (
-                "❓ <b>راهنمای استفاده از ربات:</b>\n\n"
-                "🔹 برای دریافت کامل‌ترین لیست کانفیگ‌ها دستور /start یا /get_all را بزنید.\n"
-                "🔹 برای دریافت پروتکل‌های خاص می‌توانید از منوی دستورات ربات پروتکل موردنظر را انتخاب کنید.\n\n"
-                "📢 کانال رسمی ما:\n"
-                "https://t.me/Goodbaye_filtering"
-            )
-            send_message(chat_id, help_text)
+        elif text == "/get_all":
+            all_list = []
+            for k in configs:
+                all_list.extend(configs[k][:2]) # ۲ تا از هر پروتکل
+            
+            if not all_list:
+                send_message(chat_id, "❌ کانفیگی یافت نشد.")
+            else:
+                formatted_list = "\n\n".join([f"<code>{c}</code>" for c in all_list])
+                reply = (
+                    f"📦 <b>مجموعه کانفیگ‌های برتر (تست‌شده):</b>\n\n"
+                    f"{formatted_list}\n\n"
+                    f"👇 روی کدها بزنید تا کپی شوند."
+                )
+                send_message(chat_id, reply)
 
 if __name__ == "__main__":
     handle_updates()
