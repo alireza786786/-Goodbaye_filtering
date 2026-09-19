@@ -1,13 +1,12 @@
-name: Auto Update Subscriptions
+name: Auto Update Subscriptions and Proxies
 
 on:
   schedule:
-    # اجرای خودکار هر ۴ ساعت یک‌بار (می‌توانید زمان را تغییر دهید)
     - cron: '0 */4 * * *'
-  workflow_dispatch: # امکان اجرای دستی از زبانه Actions
+  workflow_dispatch:
 
 jobs:
-  update-subs:
+  update-all:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,9 +21,9 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests
+        pip install requests aiohttp
 
-    - name: Run Multi Runner Script
+    - name: Run V2Ray Subscriptions Runner
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
@@ -32,10 +31,17 @@ jobs:
       run: |
         python multi_runner.py
 
+    - name: Run Telegram Proxy Collector
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHAT_ID: ${{ secrets.CHANNEL_ID }}
+      run: |
+        python proxy_collector.py
+
     - name: Commit and Push Changes
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-        git add sub*.txt
-        git diff-index --quiet HEAD || git commit -m "🤖 Auto-update subscription files [skip ci]"
+        git add sub*.txt TELEGRAM_PROXY_SUB_TXT || true
+        git diff-index --quiet HEAD || git commit -m "🤖 Auto-update subscriptions & proxies [skip ci]"
         git push
