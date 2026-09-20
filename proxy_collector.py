@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🚀 Telegram Proxy Collector v2.1
-جمع‌آوری، تست سرعت (پینگ واقعی)، مرتب‌سازی، ارسال فایل و ۳ پروکسی برتر با دکمه شیشه‌ای و قابلیت پین خودکار.
+🚀 Telegram Proxy Collector v2.2
+جمع‌آوری، تست سرعت (پینگ واقعی)، مرتب‌سازی، ارسال فایل و ۳ پروکسی برتر با دکمه شیشه‌ای.
+(منابع به صورت امن از SOURCES_JSON دریافت می‌شوند)
 """
 
 import asyncio
 import os
 import re
 import sys
+import json
 import logging
 from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple
@@ -34,25 +36,30 @@ def setup_logging():
 
 logger = setup_logging()
 
-# ==================== تنظیمات ====================
-SOURCES = [
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no1.txt",
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no2.txt",
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no3.txt",
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no4.txt",
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no5.txt",
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no6.txt",
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no7.txt",
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no8.txt",
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no9.txt",
-    "https://raw.githubusercontent.com/V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/refs/heads/main/telegram_proxy_no10.txt",
-]
-
+# ==================== تنظیمات و دریافت امن منابع ====================
 OUTPUT_FILE = "TELEGRAM_PROXY_SUB_TXT"
 CHANNEL_LINK = "https://t.me/Goodbaye_filtering"
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 CHAT_ID = os.environ.get("CHAT_ID", "").strip()
+
+def load_sources_from_env() -> List[str]:
+    """دریافت امن منابع پروکسی از سکرت SOURCES_JSON"""
+    raw_json = os.environ.get("SOURCES_JSON", "").strip()
+    if not raw_json:
+        logger.error("❌ متغیر SOURCES_JSON یافت نشد!")
+        return []
+    try:
+        data = json.loads(raw_json)
+        # کلید by8 حاوی منابع پروکسی تلگرام است
+        sources = data.get("by8", [])
+        logger.info(f"🔑 تعداد {len(sources)} منبع پروکسی از SOURCES_JSON استخراج شد.")
+        return sources
+    except Exception as e:
+        logger.error(f"❌ خطا در خواندن SOURCES_JSON: {e}")
+        return []
+
+SOURCES = load_sources_from_env()
 
 # تنظیمات شبکه و Timeout
 FETCH_TIMEOUT = 15.0
@@ -141,30 +148,31 @@ async def fetch_source(session: aiohttp.ClientSession, url: str, retries: int = 
     """دریافت منبع با retry mechanism برای شبکه‌های ناپایدار"""
     for attempt in range(retries):
         try:
-            logger.info(f"📥 درحال دریافت از {url} (تلاش {attempt + 1}/{retries})...")
+            logger.info(f"📥 درحال دریافت منبع (تلاش {attempt + 1}/{retries})...")
             
             async with session.get(
                 url,
                 timeout=aiohttp.ClientTimeout(total=FETCH_TIMEOUT),
-                ssl=False
+                ssl=False,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
             ) as r:
                 if r.status != 200:
-                    logger.warning(f"⚠️ وضعیت HTTP {r.status} برای {url}")
+                    logger.warning(f"⚠️ وضعیت HTTP {r.status}")
                     if attempt < retries - 1:
                         await asyncio.sleep(RETRY_DELAY)
                     continue
                 
                 text = await r.text(errors="ignore")
                 lines = text.splitlines()
-                logger.info(f"✅ {len(lines)} خط از {url} دریافت شد")
+                logger.info(f"✅ {len(lines)} خط دریافت شد")
                 return lines
         
         except asyncio.TimeoutError:
-            logger.warning(f"⏱ Timeout برای {url} (تلاش {attempt + 1}/{retries})")
+            logger.warning(f"⏱ Timeout (تلاش {attempt + 1}/{retries})")
             if attempt < retries - 1:
                 await asyncio.sleep(RETRY_DELAY)
         except Exception as e:
-            logger.warning(f"❌ خطا در دریافت {url}: {e} (تلاش {attempt + 1}/{retries})")
+            logger.warning(f"❌ خطا در دریافت: {e} (تلاش {attempt + 1}/{retries})")
             if attempt < retries - 1:
                 await asyncio.sleep(RETRY_DELAY)
     
@@ -177,6 +185,10 @@ async def collect_all() -> List[ProxyLink]:
     logger.info("🚀 شروع جمع‌آوری پروکسی‌ها")
     logger.info("=" * 60)
     
+    if not SOURCES:
+        logger.error("❌ هیچ منبعی برای خواندن وجود ندارد!")
+        return []
+
     connector = aiohttp.TCPConnector(
         limit_per_host=5,
         limit=100,
@@ -300,7 +312,6 @@ async def send_to_telegram(file_path: str, proxies: List[ProxyLink]) -> None:
 
     url_doc = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
     url_msg = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    url_pin = f"https://api.telegram.org/bot{BOT_TOKEN}/pinChatMessage"
 
     try:
         connector = aiohttp.TCPConnector(ssl=False)
@@ -360,28 +371,6 @@ async def send_to_telegram(file_path: str, proxies: List[ProxyLink]) -> None:
                         res = await r.json()
                         if res.get("ok"):
                             logger.info("✅ پیام همراه با ۳ دکمه پرسرعت ارسال شد")
-                            
-                            # ۳. پین خودکار پیام
-                            message_id = res["result"]["message_id"]
-                            pin_payload = {
-                                "chat_id": CHAT_ID,
-                                "message_id": message_id,
-                                "disable_notification": False
-                            }
-                            
-                            try:
-                                async with session.post(
-                                    url_pin,
-                                    json=pin_payload,
-                                    timeout=aiohttp.ClientTimeout(total=15)
-                                ) as pin_res:
-                                    pin_json = await pin_res.json()
-                                    if pin_json.get("ok"):
-                                        logger.info("📌 پیام با موفقیت پین شد")
-                                    else:
-                                        logger.warning(f"⚠️ امکان پین کردن نبود: {pin_json.get('description')}")
-                            except Exception as e:
-                                logger.warning(f"⚠️ خطا در پین کردن: {e}")
                         else:
                             logger.error(f"❌ خطای ارسال پیام: {res.get('description')}")
                 except Exception as e:
@@ -395,7 +384,7 @@ async def send_to_telegram(file_path: str, proxies: List[ProxyLink]) -> None:
 async def main() -> None:
     """تابع اصلی"""
     logger.info("\n" + "=" * 60)
-    logger.info("🚀 Telegram Proxy Collector v2.1 - شروع")
+    logger.info("🚀 Telegram Proxy Collector v2.2 - شروع")
     logger.info("=" * 60 + "\n")
     
     # بررسی محیط
